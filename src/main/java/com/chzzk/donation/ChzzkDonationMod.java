@@ -2,8 +2,10 @@ package com.chzzk.donation;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.network.chat.Component;
 
 public class ChzzkDonationMod implements ClientModInitializer {
+    private static boolean wasInWorld = false;
 
     @Override
     public void onInitializeClient() {
@@ -16,8 +18,18 @@ public class ChzzkDonationMod implements ClientModInitializer {
         }
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.player == null) return;
+            boolean inWorld = client.player != null;
+            // 월드 (재)입장 시점에 현재 연동 상태를 다시 안내
+            if (inWorld && !wasInWorld) DonationPoller.forceReannounce();
+            wasInWorld = inWorld;
+            if (!inWorld) return;
+
             DonationEffects.tick(client);
+
+            Integer statusChange = DonationPoller.consumeStatusChange();
+            if (statusChange != null) {
+                client.player.sendSystemMessage(Component.literal(DonationPoller.statusMessage(statusChange)));
+            }
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(DonationPoller::stop));
