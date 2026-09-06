@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 public class DonationEffects {
     private static final Random RAND = new Random();
     private static final int SPIN_TICKS = 40;
-    private static final int COOLDOWN_TICKS = 40; // 다음 이펙트 전 대기시간 (2초, 20 TPS)
+    private static final int COOLDOWN_TICKS = 20; // 다음 이펙트 전 대기시간 (1초, 20 TPS)
 
     // ── 룰렛 타입 ─────────────────────────────────────────────────────────────
     private enum SpinType { ITEM, MOB, POTION, INVEN }
@@ -316,7 +316,7 @@ public class DonationEffects {
             ItemStack stack = sp.getInventory().getItem(i);
             if (!stack.isEmpty()) {
                 slots.add(i);
-                names.add(stack.getDisplayName().getString());
+                names.add(stack.getHoverName().getString());
             }
         }
         if (slots.isEmpty()) {
