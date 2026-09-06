@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -365,6 +366,10 @@ public class DonationEffects {
             pos.x + Math.cos(angle) * dist, pos.y + 1, pos.z + Math.sin(angle) * dist, null);
         tnt.setFuse(60);
         level.addFreshEntity(tnt);
+        // 바닐라 TntBlock 점화 시와 동일하게 도화선 소리를 직접 재생해줘야 함
+        // (PrimedTnt 엔티티 스폰만으로는 소리가 나지 않음)
+        level.playSound(null, tnt.getX(), tnt.getY(), tnt.getZ(),
+            SoundEvents.TNT_PRIMED, SoundSource.BLOCKS, 1.0f, 1.0f);
         showEffectTitle("TNT!", event, client);
     }
 
