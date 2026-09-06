@@ -18,10 +18,6 @@ public class ChzzkDonationMod implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null) return;
             DonationEffects.tick(client);
-            DonationEvent event;
-            while ((event = DonationQueue.poll()) != null) {
-                DonationEffects.apply(event, client);
-            }
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(DonationPoller::stop));

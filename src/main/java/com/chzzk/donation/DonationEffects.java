@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 public class DonationEffects {
     private static final Random RAND = new Random();
     private static final int SPIN_TICKS = 40;
+    private static final int COOLDOWN_TICKS = 40; // 다음 이펙트 전 대기시간 (2초, 20 TPS)
 
     // ── 룰렛 타입 ─────────────────────────────────────────────────────────────
     private enum SpinType { ITEM, MOB, POTION, INVEN }
@@ -39,6 +40,7 @@ public class DonationEffects {
         SpinType type,
         DonationEvent event,
         String winnerDisplay,  // 결과 표시 문자열
+        String winnerLabel,    // 마지막 스핀 프레임에 고정 표시할 당첨 이름 (pool과 동일 포맷)
         int winnerSlot,        // INVEN: 삭제 슬롯 번호, POTION: 레벨(amplifier), 나머지: -1
         Object winnerData,     // Item / EntityType<?> / Holder<MobEffect> / null
         List<String> pool,     // 애니메이션 중 표시할 이름 목록
@@ -46,6 +48,7 @@ public class DonationEffects {
     ) {}
 
     private static volatile SpinState _spin = null;
+    private static volatile int _cooldown = 0;
 
     // ── 전체 몹 목록 ──────────────────────────────────────────────────────────
     private static final List<EntityType<?>> ALL_MOBS = List.of(
@@ -150,11 +153,33 @@ public class DonationEffects {
         }
     }
 
-    // ── 매 틱 처리 (룰렛 애니메이션 + 사운드) ─────────────────────────────────
+    // ── 매 틱 처리: 큐 디스패치 + 쿨다운 + 룰렛 애니메이션 ────────────────────
     public static void tick(Minecraft client) {
-        SpinState spin = _spin;
-        if (spin == null || client.player == null) return;
+        if (client.player == null) return;
 
+        if (_spin != null) {
+            tickSpin(client);
+            return;
+        }
+
+        if (_cooldown > 0) {
+            _cooldown--;
+            return;
+        }
+
+        DonationEvent event = DonationQueue.poll();
+        if (event == null) return;
+        apply(event, client);
+        if (_spin == null) {
+            // 즉시 처리되는 이펙트(번개/TNT/즉사/인벤세이브/타이틀)는 스핀이 없으므로
+            // 여기서 바로 다음 이펙트까지의 대기시간을 시작한다.
+            _cooldown = COOLDOWN_TICKS;
+        }
+    }
+
+    // ── 룰렛 애니메이션 진행 ─────────────────────────────────────────────────
+    private static void tickSpin(Minecraft client) {
+        SpinState spin = _spin;
         int t = spin.ticks;
 
         if (t <= 0) {
@@ -163,6 +188,7 @@ public class DonationEffects {
             client.player.playSound(SoundEvents.PLAYER_LEVELUP, 1.0f, 1.0f);
             finishSpin(spin, client);
             _spin = null;
+            _cooldown = COOLDOWN_TICKS;
             return;
         }
 
@@ -173,22 +199,31 @@ public class DonationEffects {
         else if (t > 10) { interval = 2; pitch = 1.5f; }
         else { interval = 3; pitch = 1.0f; }
 
-        if (t % interval == 0) {
+        if (t == 1) {
+            // 마지막 프레임은 항상 당첨 아이템으로 고정해서 결과 발표와 자연스럽게 이어지게 함
+            client.gui.hud.setTitle(Component.literal(spinTitleFor(spin.type)));
+            client.gui.hud.setSubtitle(Component.literal(spin.winnerLabel));
+            client.gui.hud.setTimes(0, 4, 0);
+            client.player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 0.5f, pitch);
+        } else if (t % interval == 0) {
             String label = spin.pool.get(RAND.nextInt(spin.pool.size()));
-            String title = switch (spin.type) {
-                case ITEM  -> "아이템 추첨 중...";
-                case MOB   -> "몹 추첨 중...";
-                case POTION -> "포션 추첨 중...";
-                case INVEN -> "삭제될 아이템...";
-            };
-            client.gui.hud.setTitle(Component.literal(title));
+            client.gui.hud.setTitle(Component.literal(spinTitleFor(spin.type)));
             client.gui.hud.setSubtitle(Component.literal(label));
             client.gui.hud.setTimes(0, 4, 0);
             client.player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 0.5f, pitch);
         }
 
-        _spin = new SpinState(spin.type, spin.event, spin.winnerDisplay,
+        _spin = new SpinState(spin.type, spin.event, spin.winnerDisplay, spin.winnerLabel,
             spin.winnerSlot, spin.winnerData, spin.pool, t - 1);
+    }
+
+    private static String spinTitleFor(SpinType type) {
+        return switch (type) {
+            case ITEM   -> "아이템 추첨 중...";
+            case MOB    -> "몹 추첨 중...";
+            case POTION -> "포션 추첨 중...";
+            case INVEN  -> "삭제될 아이템...";
+        };
     }
 
     // ── 당첨 후 실제 이펙트 실행 ──────────────────────────────────────────────
@@ -245,6 +280,8 @@ public class DonationEffects {
         client.gui.hud.setTitle(Component.literal(result));
         client.gui.hud.setSubtitle(Component.literal(sub));
         client.gui.hud.setTimes(fadeIn, stay, fadeOut);
+        client.player.sendSystemMessage(Component.literal(
+            "[후원 이펙트] " + event.nickname() + " " + String.format("%,d", event.amount()) + "원 - " + result));
     }
 
     // ── 서버 헬퍼 ────────────────────────────────────────────────────────────
@@ -287,8 +324,9 @@ public class DonationEffects {
         }
         int idx        = RAND.nextInt(slots.size());
         int winnerSlot = slots.get(idx);
-        String winner  = names.get(idx) + " 삭제!";
-        _spin = new SpinState(SpinType.INVEN, event, winner, winnerSlot, null, names, SPIN_TICKS);
+        String winnerName = names.get(idx);
+        _spin = new SpinState(SpinType.INVEN, event, winnerName + " 삭제!", winnerName,
+            winnerSlot, null, names, SPIN_TICKS);
     }
 
     // ── 몹 소환 룰렛 (spawn_mobs) ────────────────────────────────────────────
@@ -297,8 +335,9 @@ public class DonationEffects {
         List<String> pool = ALL_MOBS.stream()
             .map(t -> t.getDescription().getString())
             .collect(Collectors.toList());
-        _spin = new SpinState(SpinType.MOB, event,
-            winner.getDescription().getString() + " 소환!", -1, winner, pool, SPIN_TICKS);
+        String winnerName = winner.getDescription().getString();
+        _spin = new SpinState(SpinType.MOB, event, winnerName + " 소환!", winnerName,
+            -1, winner, pool, SPIN_TICKS);
     }
 
     // ── 번개 소환 (즉시, 룰렛 없음) ──────────────────────────────────────────
@@ -354,8 +393,9 @@ public class DonationEffects {
         List<String> pool = SURVIVAL_ITEMS.stream()
             .map(i -> i.getName(new ItemStack(i)).getString())
             .collect(Collectors.toList());
-        _spin = new SpinState(SpinType.ITEM, event,
-            winner.getName(new ItemStack(winner)).getString() + " 획득!", -1, winner, pool, SPIN_TICKS);
+        String winnerName = winner.getName(new ItemStack(winner)).getString();
+        _spin = new SpinState(SpinType.ITEM, event, winnerName + " 획득!", winnerName,
+            -1, winner, pool, SPIN_TICKS);
     }
 
     // ── 랜덤 포션 룰렛 (random_potion) ──────────────────────────────────────
@@ -365,9 +405,10 @@ public class DonationEffects {
         List<String> pool = POTION_EFFECTS.stream()
             .map(e -> e.value().getDisplayName().getString())
             .collect(Collectors.toList());
-        String winnerDisplay = winner.value().getDisplayName().getString()
-            + " " + (amplifier + 1) + "레벨!";
+        String winnerName = winner.value().getDisplayName().getString();
+        String winnerDisplay = winnerName + " " + (amplifier + 1) + "레벨!";
         // winnerSlot 필드에 amplifier 저장
-        _spin = new SpinState(SpinType.POTION, event, winnerDisplay, amplifier, winner, pool, SPIN_TICKS);
+        _spin = new SpinState(SpinType.POTION, event, winnerDisplay, winnerName,
+            amplifier, winner, pool, SPIN_TICKS);
     }
 }
