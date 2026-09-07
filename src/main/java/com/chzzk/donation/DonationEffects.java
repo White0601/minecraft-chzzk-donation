@@ -285,6 +285,13 @@ public class DonationEffects {
             "[후원 이펙트] " + event.nickname() + " " + String.format("%,d", event.amount()) + "원 - " + result));
     }
 
+    // ── 인벤세이브 상태 조회 (/인벤세이브 명령어용) ────────────────────────────
+    public static Boolean isKeepInventoryOn(Minecraft client) {
+        ServerLevel level = getServerLevel(client);
+        if (level == null) return null;
+        return level.getGameRules().get(GameRules.KEEP_INVENTORY);
+    }
+
     // ── 서버 헬퍼 ────────────────────────────────────────────────────────────
     private static ServerLevel getServerLevel(Minecraft client) {
         if (client.getSingleplayerServer() == null) return null;

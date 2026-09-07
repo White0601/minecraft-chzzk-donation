@@ -1,6 +1,8 @@
 package com.chzzk.donation;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.network.chat.Component;
 
@@ -30,6 +32,17 @@ public class ChzzkDonationMod implements ClientModInitializer {
             if (statusChange != null) {
                 client.player.sendSystemMessage(Component.literal(DonationPoller.statusMessage(statusChange)));
             }
+        });
+
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            dispatcher.register(ClientCommands.literal("인벤세이브").executes(ctx -> {
+                Boolean keepInv = DonationEffects.isKeepInventoryOn(ctx.getSource().getClient());
+                String msg = (keepInv == null)
+                    ? "[치지직 연동] 지금은 확인할 수 없어요 (월드에 접속되어 있어야 합니다)"
+                    : "[치지직 연동] 인벤세이브 현재 상태: " + (keepInv ? "ON (사망해도 아이템 유지)" : "OFF (사망 시 아이템 드랍)");
+                ctx.getSource().sendFeedback(Component.literal(msg));
+                return 1;
+            }));
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(DonationPoller::stop));
