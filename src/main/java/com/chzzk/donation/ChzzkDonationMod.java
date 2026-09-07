@@ -4,7 +4,10 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 public class ChzzkDonationMod implements ClientModInitializer {
     private static boolean wasInWorld = false;
@@ -44,6 +47,19 @@ public class ChzzkDonationMod implements ClientModInitializer {
                 return 1;
             }));
         });
+
+        HudElementRegistry.addLast(
+            Identifier.fromNamespaceAndPath("chzzk-donation", "keepinv_status"),
+            (extractor, deltaTracker) -> {
+                Minecraft client = Minecraft.getInstance();
+                if (client.player == null) return;
+                Boolean keepInv = DonationEffects.isKeepInventoryOn(client);
+                if (keepInv == null) return;
+                String text = "인벤세이브 " + (keepInv ? "ON" : "OFF");
+                int color = keepInv ? 0xFF55FF55 : 0xFFFF5555;
+                extractor.text(client.font, text, 6, 6, color, true);
+            }
+        );
 
         Runtime.getRuntime().addShutdownHook(new Thread(DonationPoller::stop));
     }
