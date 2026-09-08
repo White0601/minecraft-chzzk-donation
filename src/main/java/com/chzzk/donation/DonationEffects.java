@@ -147,8 +147,12 @@ public class DonationEffects {
             case "lightning"          -> spawnLightning(event, client);
             case "tnt"                -> spawnTnt(event, client);
             case "instant_kill"       -> instantKill(event, client);
-            case "keep_inventory_on"  -> setKeepInventory(true, event, client);
-            case "keep_inventory_off" -> setKeepInventory(false, event, client);
+            case "keep_inventory_on"     -> setKeepInventory(true, event, client);
+            case "keep_inventory_off"    -> setKeepInventory(false, event, client);
+            case "keep_inventory_toggle" -> {
+                Boolean current = isKeepInventoryOn(client);
+                setKeepInventory(current == null || !current, event, client);
+            }
             case "random_item"        -> startItemSpin(event, client);
             case "random_potion"      -> startPotionSpin(event, client);
         }
